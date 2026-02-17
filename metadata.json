@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Hadir.In",
+  "description": "Sistem absensi modern untuk guru dan pegawai dengan fitur Geofencing, pengenalan wajah (simulasi), jurnal harian, dan manajemen perizinan terpadu.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
