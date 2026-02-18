@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Map as MapIcon, CheckCircle2, AlertTriangle, RefreshCw, ShieldAlert, ArrowRight, LogIn, LogOut as LogOutIcon, Navigation } from 'lucide-react';
+import { Camera, Map as MapIcon, CheckCircle2, AlertTriangle, RefreshCw, ShieldAlert, ArrowRight, LogIn, LogOut as LogOutIcon, Navigation, User as UserIcon } from 'lucide-react';
 import { User, AttendanceRecord, AppSettings } from '../types';
 
 declare var L: any;
@@ -20,6 +20,7 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isLoadingCamera, setIsLoadingCamera] = useState(false);
   const [isLoadingGPS, setIsLoadingGPS] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -28,13 +29,13 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
   const leafletMap = useRef<any>(null);
   const marker = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
   const userRecordsToday = records.filter(r => r.userId === user.id && r.timestamp.startsWith(today));
   const hasIn = userRecordsToday.find(r => r.type === 'in');
   const hasOut = userRecordsToday.find(r => r.type === 'out');
 
-  // Check for Secure Context (HTTPS) - MANDATORY FOR ANDROID
   const isSecure = window.isSecureContext || window.location.hostname === 'localhost';
 
   useEffect(() => {
@@ -43,7 +44,10 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
     } else {
       stopTracking();
     }
-    return () => stopTracking();
+    return () => {
+      stopTracking();
+      stopCamera();
+    };
   }, [step]);
 
   const initMap = (lat: number, lng: number) => {
@@ -52,7 +56,7 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
       leafletMap.current = L.map(mapRef.current, {
         zoomControl: false,
         attributionControl: false,
-        dragging: !L.Browser.mobile, // Disable dragging on mobile for smoother feel
+        dragging: !L.Browser.mobile,
         touchZoom: true
       }).setView([lat, lng], 17);
 
@@ -97,14 +101,12 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
     setIsLoadingGPS(true);
     setError(null);
 
-    // Initial check for faster response
     navigator.geolocation.getCurrentPosition(
       (pos) => handlePosition(pos),
       (err) => handleGPSError(err),
       { enableHighAccuracy: true, timeout: 5000 }
     );
 
-    // Constant watching for precision
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => handlePosition(pos),
       (err) => handleGPSError(err),
@@ -115,7 +117,6 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
   const handlePosition = (pos: GeolocationPosition) => {
     const { latitude: lat, longitude: lng, accuracy } = pos.coords;
     
-    // Android accuracy check
     if (accuracy > 100) {
       setAddress(`Akurasi lemah (${Math.round(accuracy)}m). Mencari sinyal...`);
     } else {
@@ -158,42 +159,78 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
     }
   };
 
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+  };
+
   const startCamera = async () => {
+    setIsLoadingCamera(true);
+    setError(null);
     try {
-      setIsCameraActive(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
+      const constraints = {
+        video: {
           facingMode: 'user',
-          width: { ideal: 720 },
-          height: { ideal: 720 }
-        } 
-      });
-      if (videoRef.current) videoRef.current.srcObject = stream;
+          width: { ideal: 640 },
+          height: { ideal: 640 }
+        },
+        audio: false
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        // On many Android devices, we need to explicitly call play()
+        await videoRef.current.play();
+      }
+      setIsCameraActive(true);
+      setIsLoadingCamera(false);
     } catch (err) {
-      setError('Kamera diblokir atau tidak tersedia.');
+      console.error("Camera error:", err);
+      setError('Kamera tidak dapat diakses. Pastikan izin telah diberikan.');
       setIsCameraActive(false);
+      setIsLoadingCamera(false);
     }
   };
 
   const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current && canvasRef.current && streamRef.current) {
       const context = canvasRef.current.getContext('2d');
       if (context) {
-        const size = Math.min(videoRef.current.videoWidth, videoRef.current.videoHeight);
-        canvasRef.current.width = size;
-        canvasRef.current.height = size;
-        // Center crop for better selfie
+        const vw = videoRef.current.videoWidth;
+        const vh = videoRef.current.videoHeight;
+        
+        if (vw === 0 || vh === 0) {
+          setError("Menunggu stream kamera siap...");
+          return;
+        }
+
+        const size = Math.min(vw, vh);
+        canvasRef.current.width = 640;
+        canvasRef.current.height = 640;
+
+        // Draw mirror image
+        context.translate(640, 0);
+        context.scale(-1, 1);
+
         context.drawImage(
-          videoRef.current, 
-          (videoRef.current.videoWidth - size) / 2, 
-          (videoRef.current.videoHeight - size) / 2, 
-          size, size, 
-          0, 0, size, size
+          videoRef.current,
+          (vw - size) / 2,
+          (vh - size) / 2,
+          size, size,
+          0, 0, 640, 640
         );
+
         setPhoto(canvasRef.current.toDataURL('image/jpeg', 0.8));
-        const stream = videoRef.current.srcObject as MediaStream;
-        if (stream) stream.getTracks().forEach(t => t.stop());
-        setIsCameraActive(false);
+        stopCamera();
       }
     }
   };
@@ -213,7 +250,7 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-20 md:pb-0">
+    <div className="max-w-2xl mx-auto space-y-4 pb-24 md:pb-0">
       {!isSecure && (
         <div className="bg-red-600 text-white p-4 rounded-2xl flex items-center space-x-3 animate-pulse shadow-lg">
           <ShieldAlert size={24} />
@@ -339,25 +376,81 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
 
         {step === 'camera' && (
           <div className="space-y-4 flex-1 flex flex-col animate-in fade-in">
-            <h3 className="font-black text-gray-800 uppercase text-sm tracking-tight text-center">Verifikasi Wajah</h3>
+            <div className="flex items-center justify-between mb-2">
+                <h3 className="font-black text-gray-800 uppercase text-sm tracking-tight">Verifikasi Wajah</h3>
+                {!photo && (
+                  <button 
+                    onClick={() => { stopCamera(); startCamera(); }}
+                    className="p-2 text-blue-600 bg-blue-50 rounded-xl"
+                  >
+                    <RefreshCw size={18} className={isLoadingCamera ? 'animate-spin' : ''} />
+                  </button>
+                )}
+            </div>
+
             <div className="bg-black rounded-[2.5rem] aspect-square relative overflow-hidden border-4 border-white shadow-2xl mx-auto w-full max-w-sm flex items-center justify-center">
                {!photo ? (
                  <>
-                   <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
-                   <div className="absolute inset-0 border-[20px] border-black/20 rounded-full pointer-events-none"></div>
+                   {isLoadingCamera && (
+                     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900 text-white space-y-4">
+                        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span className="text-xs font-black uppercase tracking-widest">Memulai Kamera...</span>
+                     </div>
+                   )}
+                   <video 
+                    ref={videoRef} 
+                    autoPlay 
+                    playsInline 
+                    muted 
+                    className="w-full h-full object-cover transform scale-x-[-1]" 
+                   />
+                   <div className="absolute inset-0 z-10 border-[30px] border-black/30 rounded-full pointer-events-none">
+                     <div className="w-full h-full border-2 border-white/50 rounded-full"></div>
+                   </div>
+                   
+                   {!isLoadingCamera && isCameraActive && (
+                      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20">
+                        <span className="text-[10px] text-white font-black uppercase">Posisikan Wajah di Tengah</span>
+                      </div>
+                   )}
                  </>
                ) : (
                  <img src={photo} className="w-full h-full object-cover" alt="Selfie" />
                )}
-               {isCameraActive && !photo && (
-                 <button onClick={capturePhoto} className="absolute bottom-6 left-1/2 -translate-x-1/2 w-20 h-20 bg-white rounded-full border-8 border-blue-600 shadow-2xl active:scale-90 transition-transform" />
+               
+               {isCameraActive && !photo && !isLoadingCamera && (
+                 <button 
+                  onClick={capturePhoto} 
+                  className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-16 h-16 bg-white rounded-full border-4 border-blue-600 shadow-2xl active:scale-90 transition-transform flex items-center justify-center"
+                 >
+                    <div className="w-12 h-12 border-2 border-gray-100 rounded-full"></div>
+                 </button>
                )}
             </div>
 
+            {error && !photo && (
+              <div className="p-4 bg-red-50 text-red-600 rounded-2xl flex items-center space-x-3 border border-red-100">
+                <AlertTriangle size={20} className="shrink-0" />
+                <span className="text-xs font-bold">{error}</span>
+              </div>
+            )}
+
             {photo && (
               <div className="flex space-x-3 mt-auto">
-                <button onClick={() => { setPhoto(null); startCamera(); }} className="flex-1 py-4 bg-gray-100 rounded-2xl font-black text-gray-600 text-sm uppercase">Ulangi</button>
-                <button onClick={submitAttendance} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-100 text-sm uppercase">Kirim Data</button>
+                <button 
+                  onClick={() => { setPhoto(null); startCamera(); }} 
+                  className="flex-1 py-4 bg-gray-100 rounded-2xl font-black text-gray-600 text-sm uppercase flex items-center justify-center space-x-2"
+                >
+                  <RefreshCw size={18} />
+                  <span>Ulangi</span>
+                </button>
+                <button 
+                  onClick={submitAttendance} 
+                  className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-100 text-sm uppercase flex items-center justify-center space-x-2"
+                >
+                  <CheckCircle2 size={18} />
+                  <span>Kirim Data</span>
+                </button>
               </div>
             )}
             <canvas ref={canvasRef} className="hidden" />
