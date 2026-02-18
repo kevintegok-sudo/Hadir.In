@@ -43,7 +43,8 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange, user }) =
               p-2.5 rounded-2xl transition-all duration-300
               ${activeTab === item.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-transparent'}
             `}>
-              {React.cloneElement(item.icon as React.ReactElement, { size: 20 })}
+              {/* Fix: Explicitly cast to ReactElement<any> so TypeScript allows passing the 'size' prop to cloneElement */}
+              {React.cloneElement(item.icon as React.ReactElement<any>, { size: 20 })}
             </div>
             <span className={`
               text-[9px] font-black uppercase tracking-tighter mt-1.5 transition-all duration-300

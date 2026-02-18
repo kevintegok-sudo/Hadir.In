@@ -177,8 +177,8 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
       const constraints = {
         video: {
           facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 640 }
+          width: { ideal: 1080 },
+          height: { ideal: 1080 }
         },
         audio: false
       };
@@ -188,7 +188,6 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        // On many Android devices, we need to explicitly call play()
         await videoRef.current.play();
       }
       setIsCameraActive(true);
@@ -202,7 +201,7 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
   };
 
   const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current && streamRef.current) {
+    if (videoRef.current && canvasRef.current && streamRef.current && location) {
       const context = canvasRef.current.getContext('2d');
       if (context) {
         const vw = videoRef.current.videoWidth;
@@ -214,22 +213,49 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
         }
 
         const size = Math.min(vw, vh);
-        canvasRef.current.width = 640;
-        canvasRef.current.height = 640;
+        const canvasSize = 1080; // High quality output
+        canvasRef.current.width = canvasSize;
+        canvasRef.current.height = canvasSize;
 
-        // Draw mirror image
-        context.translate(640, 0);
+        // 1. Draw Mirror Image (Camera Frame)
+        context.save();
+        context.translate(canvasSize, 0);
         context.scale(-1, 1);
-
         context.drawImage(
           videoRef.current,
           (vw - size) / 2,
           (vh - size) / 2,
           size, size,
-          0, 0, 640, 640
+          0, 0, canvasSize, canvasSize
         );
+        context.restore();
 
-        setPhoto(canvasRef.current.toDataURL('image/jpeg', 0.8));
+        // 2. Add Watermark Bar (Background for text)
+        context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        context.fillRect(0, canvasSize - 180, canvasSize, 180);
+
+        // 3. Add Watermark Text (Metadata)
+        context.fillStyle = '#ffffff';
+        context.textBaseline = 'top';
+        
+        // Name and Type
+        context.font = '900 36px Inter, sans-serif';
+        const typeLabel = attendanceType === 'in' ? 'ABSEN MASUK' : 'ABSEN PULANG';
+        context.fillText(`${user.name.toUpperCase()} - ${typeLabel}`, 40, canvasSize - 145);
+
+        // Timestamp
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+        const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+        context.font = '700 28px Inter, sans-serif';
+        context.fillText(`${dateStr} | ${timeStr}`, 40, canvasSize - 95);
+
+        // Geolocation
+        context.font = '500 24px Inter, sans-serif';
+        context.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        context.fillText(`LOC: ${location.lat.toFixed(7)}, ${location.lng.toFixed(7)}`, 40, canvasSize - 55);
+
+        setPhoto(canvasRef.current.toDataURL('image/jpeg', 0.9));
         stopCamera();
       }
     }
