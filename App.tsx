@@ -1,15 +1,15 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { User, AttendanceRecord, JournalEntry, PermissionRequest, PermissionStatus, AppSettings } from './types';
 import { MOCK_USERS, DEFAULT_SETTINGS } from './constants';
-import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import AbsenView from './components/AbsenView';
 import JournalView from './components/JournalView';
 import PermissionView from './components/PermissionView';
 import AdminDashboard from './components/AdminDashboard';
 import LoginView from './components/LoginView';
-import { LogOut } from 'lucide-react';
+import BottomNav from './components/BottomNav';
+import { LogOut, Bell } from 'lucide-react';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -20,6 +20,26 @@ const App: React.FC = () => {
   const [journals, setJournals] = useState<JournalEntry[]>([]);
   const [permissions, setPermissions] = useState<PermissionRequest[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  // Sync History API for Android Back Button
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.tab) {
+        setActiveTab(event.state.tab);
+      } else {
+        setActiveTab('dashboard');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const changeTab = useCallback((tab: string) => {
+    if (activeTab === tab) return;
+    setActiveTab(tab);
+    window.history.pushState({ tab }, '', `#${tab}`);
+  }, [activeTab]);
 
   useEffect(() => {
     const savedUsers = localStorage.getItem('edu_users');
@@ -47,6 +67,8 @@ const App: React.FC = () => {
     if (foundUser) {
       setCurrentUser(foundUser);
       localStorage.setItem('edu_user', JSON.stringify(foundUser));
+      // Reset history to base dashboard on login
+      window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
       return true;
     }
     return false;
@@ -126,33 +148,43 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} user={currentUser} />
-      
-      <main className="flex-1 flex flex-col min-w-0 overflow-auto bg-gray-50/50">
-        <header className="bg-white px-8 py-6 flex items-center justify-between sticky top-0 z-30">
-          <h1 className="text-2xl font-black text-gray-800 tracking-tight capitalize">
-            {activeTab === 'admin' ? 'Pusat Kendali Admin' : activeTab === 'dashboard' ? 'Beranda' : activeTab}
-          </h1>
-          <div className="flex items-center space-x-6">
-            <div className="hidden md:flex flex-col text-right">
-              <span className="text-sm font-black text-gray-800 tracking-tight">{currentUser.name}</span>
-              <span className="text-[10px] text-blue-600 font-black uppercase tracking-widest">{currentUser.role}</span>
+    <div className="flex flex-col min-h-screen bg-gray-50/50">
+      <header className="bg-white/80 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-40 border-b border-gray-100">
+        <div className="flex items-center space-x-2">
+           <div className="w-8 h-8">
+              <svg viewBox="0 0 100 100" className="w-full h-full">
+                <polygon points="20,70 45,70 45,30 20,30" fill="#3B82F6" opacity="0.8" />
+                <polygon points="40,90 85,45 40,0" fill="#2563EB" />
+                <polygon points="20,40 50,40 50,15" fill="#60A5FA" />
+              </svg>
+           </div>
+           <span className="text-xl font-black tracking-tighter text-blue-600">Hadir.In</span>
+        </div>
+        
+        <div className="flex items-center space-x-4">
+          <button className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+            <Bell size={20} />
+          </button>
+          <div className="flex items-center space-x-3 pl-2 border-l border-gray-100">
+            <div className="text-right hidden sm:block">
+               <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest leading-none mb-1">{currentUser.role}</p>
+               <p className="text-xs font-black text-gray-800 leading-none">{currentUser.name.split(',')[0]}</p>
             </div>
             <button 
               onClick={handleLogout}
-              className="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all duration-300"
-              title="Logout"
+              className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 rounded-xl transition-all"
             >
-              <LogOut size={22} />
+              <LogOut size={18} />
             </button>
           </div>
-        </header>
-
-        <div className="p-6 md:p-10 max-w-7xl mx-auto w-full">
-          {renderContent()}
         </div>
+      </header>
+      
+      <main className="flex-1 pb-32 pt-6 px-4 md:px-8 max-w-5xl mx-auto w-full">
+        {renderContent()}
       </main>
+
+      <BottomNav activeTab={activeTab} onTabChange={changeTab} user={currentUser} />
     </div>
   );
 };
