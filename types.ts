@@ -57,6 +57,16 @@ export interface PermissionRequest {
   attachment?: string;
 }
 
+export interface AppNotification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  timestamp: string;
+  isRead: boolean;
+}
+
 export interface AppSettings {
   schoolLocation: {
     lat: number;

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { LogIn, User as UserIcon, Lock, AlertCircle, ShieldCheck } from 'lucide-react';
 
 interface LoginViewProps {
-  onLogin: (nip: string, pass: string) => boolean;
+  onLogin: (nip: string, pass: string) => Promise<boolean>;
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
@@ -12,19 +12,21 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
     
-    // Simulate slight delay for professional feel
-    setTimeout(() => {
-      const success = onLogin(nip, password);
+    try {
+      const success = await onLogin(nip, password);
       if (!success) {
         setError('Kombinasi NIP dan Password tidak terdaftar.');
         setIsLoading(false);
       }
-    }, 800);
+    } catch (err) {
+      setError('Terjadi kesalahan saat mencoba masuk.');
+      setIsLoading(false);
+    }
   };
 
   return (
