@@ -60,6 +60,12 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+  // Request logging
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+  });
+
   // API Routes
   app.post("/api/login", (req, res) => {
     const { nip, password } = req.body;
@@ -213,6 +219,12 @@ async function startServer() {
     );
     writeDB(db);
     res.json({ success: true });
+  });
+
+  // Error handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error("Unhandled Error:", err);
+    res.status(500).json({ message: "Internal server error", error: err.message });
   });
 
   // Vite middleware for development

@@ -48,20 +48,18 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [usersRes, attendanceRes, journalsRes, permissionsRes, settingsRes] = await Promise.all([
-          fetch('/api/users'),
-          fetch('/api/attendance'),
-          fetch('/api/journals'),
-          fetch('/api/permissions'),
-          fetch('/api/settings')
-        ]);
+        const fetchWithCheck = async (url: string) => {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
+          return res.json();
+        };
 
         const [usersData, attendanceData, journalsData, permissionsData, settingsData] = await Promise.all([
-          usersRes.json(),
-          attendanceRes.json(),
-          journalsRes.json(),
-          permissionsRes.json(),
-          settingsRes.json()
+          fetchWithCheck('/api/users'),
+          fetchWithCheck('/api/attendance'),
+          fetchWithCheck('/api/journals'),
+          fetchWithCheck('/api/permissions'),
+          fetchWithCheck('/api/settings')
         ]);
 
         setUsers(usersData);
@@ -73,14 +71,16 @@ const App: React.FC = () => {
         const savedUser = secureStorage.getItem<User>('edu_user');
         if (savedUser) {
           setCurrentUser(savedUser);
-          // Fetch notifications for the user
-          const notifRes = await fetch(`/api/notifications/${savedUser.id}`);
-          const notifData = await notifRes.json();
-          setNotifications(notifData);
+          try {
+            const notifData = await fetchWithCheck(`/api/notifications/${savedUser.id}`);
+            setNotifications(notifData);
+          } catch (e) {
+            console.warn("Failed to fetch notifications:", e);
+          }
           window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
         }
       } catch (error) {
-        console.error("Failed to fetch data:", error);
+        console.error("Failed to fetch initial data:", error);
       } finally {
         setIsInitialized(true);
       }
