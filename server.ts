@@ -1,7 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import cors from "cors";
-import bodyParser from "body-parser";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -58,17 +57,30 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(cors());
-  app.use(bodyParser.json({ limit: '50mb' }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // API Routes
   app.post("/api/login", (req, res) => {
     const { nip, password } = req.body;
+    console.log(`Login attempt - NIP: "${nip}", Password: "${password}"`);
+    
     const db = readDB();
-    const user = db.users.find((u: any) => u.nip === nip && u.password === password);
+    if (!db || !db.users) {
+      console.error("Database or users array is missing!");
+      return res.status(500).json({ message: "Internal server error" });
+    }
+
+    const user = db.users.find((u: any) => String(u.nip) === String(nip) && String(u.password) === String(password));
+    
     if (user) {
-      const { password, ...userWithoutPassword } = user;
+      console.log(`Login successful for user: ${user.name} (Role: ${user.role})`);
+      const { password: _, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } else {
+      console.log(`Login failed - No matching user found for NIP: "${nip}"`);
+      // Log available NIPs for debugging (be careful with passwords in real apps, but here it's demo)
+      console.log("Available NIPs in DB:", db.users.map((u: any) => u.nip));
       res.status(401).json({ message: "Invalid credentials" });
     }
   });
@@ -204,17 +216,18 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV === "production") {
+    app.use(express.static(path.join(__dirname, "dist")));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(__dirname, "dist", "index.html"));
+    });
+  } else {
+    console.log("Starting Vite in middleware mode...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
-    });
   }
 
   app.listen(PORT, "0.0.0.0", () => {
