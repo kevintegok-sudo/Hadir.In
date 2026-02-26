@@ -11,7 +11,6 @@ import AdminDashboard from './components/AdminDashboard';
 import LoginView from './components/LoginView';
 import BottomNav from './components/BottomNav';
 import { secureStorage } from './utils/security';
-import { storageService } from './src/services/storageService';
 import { LogOut, Bell, X, Check } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -51,23 +50,44 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const usersData = storageService.getUsers();
-        const attendanceData = storageService.getAttendance();
-        const journalsData = storageService.getJournals();
-        const permissionsData = storageService.getPermissions();
-        const settingsData = storageService.getSettings();
+        const fetchWithCheck = async (url: string) => {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
+          return res.json();
+        };
 
-        setUsers(usersData);
-        setAttendance(attendanceData);
-        setJournals(journalsData);
-        setPermissions(permissionsData);
-        setSettings(settingsData);
+        try {
+          const [usersData, attendanceData, journalsData, permissionsData, settingsData] = await Promise.all([
+            fetchWithCheck('/api/users'),
+            fetchWithCheck('/api/attendance'),
+            fetchWithCheck('/api/journals'),
+            fetchWithCheck('/api/permissions'),
+            fetchWithCheck('/api/settings')
+          ]);
+
+          setUsers(usersData);
+          setAttendance(attendanceData);
+          setJournals(journalsData);
+          setPermissions(permissionsData);
+          setSettings(settingsData);
+        } catch (apiError) {
+          console.warn("API not available, falling back to mock data:", apiError);
+          setUsers(MOCK_USERS);
+          setSettings(DEFAULT_SETTINGS);
+          setAttendance([]);
+          setJournals([]);
+          setPermissions([]);
+        }
 
         const savedUser = secureStorage.getItem<User>('edu_user');
         if (savedUser) {
           setCurrentUser(savedUser);
-          const notifData = storageService.getNotifications(savedUser.id);
-          setNotifications(notifData);
+          try {
+            const notifData = await fetchWithCheck(`/api/notifications/${savedUser.id}`);
+            setNotifications(notifData);
+          } catch (e) {
+            console.warn("Failed to fetch notifications:", e);
+          }
           window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
         }
       } catch (error) {
@@ -82,9 +102,16 @@ const App: React.FC = () => {
 
   const addNotification = useCallback(async (notif: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
     try {
-      const newNotif = storageService.addNotification(notif);
-      setNotifications(prev => [newNotif, ...prev]);
-      setToast({ message: notif.title, type: notif.type === 'warning' ? 'info' : notif.type as any });
+      const res = await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notif)
+      });
+      if (res.ok) {
+        const newNotif = await res.json();
+        setNotifications(prev => [newNotif, ...prev]);
+        setToast({ message: notif.title, type: notif.type === 'warning' ? 'info' : notif.type as any });
+      }
     } catch (error) {
       console.error("Failed to add notification:", error);
     }
@@ -100,7 +127,9 @@ const App: React.FC = () => {
   const markAllRead = async () => {
     if (!currentUser) return;
     try {
-      storageService.markAllNotificationsRead(currentUser.id);
+      await fetch(`/api/notifications/read-all/${currentUser.id}`, {
+        method: 'PATCH'
+      });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch (error) {
       console.error("Failed to mark all read:", error);
@@ -109,19 +138,30 @@ const App: React.FC = () => {
 
   const handleLogin = async (nip: string, pass: string): Promise<boolean> => {
     try {
-      const user = storageService.login(nip, pass);
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nip, password: pass })
+      });
       
-      if (user) {
+      if (res.ok) {
+        const user = await res.json();
         setCurrentUser(user);
         secureStorage.setItem('edu_user', user);
         
-        const notifData = storageService.getNotifications(user.id);
-        setNotifications(notifData);
+        try {
+          const notifRes = await fetch(`/api/notifications/${user.id}`);
+          if (notifRes.ok) {
+            const notifData = await notifRes.json();
+            setNotifications(notifData);
+          }
+        } catch (e) {
+          console.warn("Could not fetch notifications from API");
+        }
         
         window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
         return true;
       }
-      
       return false;
     } catch (error) {
       console.error("Login failed:", error);
@@ -138,8 +178,15 @@ const App: React.FC = () => {
 
   const addAttendance = async (record: AttendanceRecord) => {
     try {
-      const newRecord = storageService.addAttendance(record);
-      setAttendance(prev => [...prev, newRecord]);
+      const res = await fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record)
+      });
+      if (res.ok) {
+        const newRecord = await res.json();
+        setAttendance(prev => [...prev, newRecord]);
+      }
     } catch (error) {
       console.warn("Failed to add attendance:", error);
       setAttendance(prev => [...prev, record]);
@@ -166,8 +213,15 @@ const App: React.FC = () => {
 
   const addJournal = async (entry: JournalEntry) => {
     try {
-      const newEntry = storageService.addJournal(entry);
-      setJournals(prev => [...prev, newEntry]);
+      const res = await fetch('/api/journals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry)
+      });
+      if (res.ok) {
+        const newEntry = await res.json();
+        setJournals(prev => [...prev, newEntry]);
+      }
     } catch (error) {
       console.warn("Failed to add journal:", error);
       setJournals(prev => [...prev, entry]);
@@ -183,8 +237,13 @@ const App: React.FC = () => {
 
   const updatePermissionStatus = async (id: string, status: PermissionStatus) => {
     try {
-      const updatedPermission = storageService.updatePermissionStatus(id, status as any);
-      if (updatedPermission) {
+      const res = await fetch(`/api/permissions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (res.ok) {
+        const updatedPermission = await res.json();
         setPermissions(prev => prev.map(p => p.id === id ? updatedPermission : p));
         
         addNotification({
@@ -201,8 +260,15 @@ const App: React.FC = () => {
 
   const addPermission = async (req: PermissionRequest) => {
     try {
-      const newRequest = storageService.addPermission(req);
-      setPermissions(prev => [...prev, newRequest]);
+      const res = await fetch('/api/permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req)
+      });
+      if (res.ok) {
+        const newRequest = await res.json();
+        setPermissions(prev => [...prev, newRequest]);
+      }
     } catch (error) {
       console.warn("Failed to add permission:", error);
     }
@@ -210,8 +276,15 @@ const App: React.FC = () => {
 
   const registerUser = async (user: User) => {
     try {
-      const newUser = storageService.addUser(user);
-      setUsers(prev => [...prev, newUser]);
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user)
+      });
+      if (res.ok) {
+        const newUser = await res.json();
+        setUsers(prev => [...prev, newUser]);
+      }
     } catch (error) {
       console.warn("Failed to register user:", error);
       setUsers(prev => [...prev, user]);
@@ -220,8 +293,10 @@ const App: React.FC = () => {
 
   const deleteUser = async (id: string) => {
     try {
-      storageService.deleteUser(id);
-      setUsers(prev => prev.filter(u => u.id !== id));
+      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setUsers(prev => prev.filter(u => u.id !== id));
+      }
     } catch (error) {
       console.warn("Failed to delete user:", error);
     }
@@ -229,8 +304,15 @@ const App: React.FC = () => {
 
   const updateSettings = async (newSettings: AppSettings) => {
     try {
-      const updatedSettings = storageService.updateSettings(newSettings);
-      setSettings(updatedSettings);
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSettings)
+      });
+      if (res.ok) {
+        const updatedSettings = await res.json();
+        setSettings(updatedSettings);
+      }
     } catch (error) {
       console.warn("Failed to update settings:", error);
       setSettings(newSettings);
