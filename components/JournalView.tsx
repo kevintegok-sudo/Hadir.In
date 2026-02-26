@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User, JournalEntry } from '../types';
 import { SUBJECTS, CLASSES } from '../constants';
-import { BookOpen, CheckCircle, FileText, Plus } from 'lucide-react';
+import { BookOpen, CheckCircle, FileText, Plus, MapPin, Camera, X } from 'lucide-react';
 
 interface JournalViewProps {
   user: User;
@@ -12,12 +12,56 @@ interface JournalViewProps {
 
 const JournalView: React.FC<JournalViewProps> = ({ user, onSave, journals }) => {
   const [showForm, setShowForm] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [formData, setFormData] = useState({
     subject: SUBJECTS[0],
     className: CLASSES[0],
     material: '',
-    notes: ''
+    notes: '',
+    photo: '',
+    location: null as null | { lat: number; lng: number; address: string }
   });
+
+  const handleCapturePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, photo: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGetLocation = () => {
+    setLocationLoading(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setFormData({
+            ...formData,
+            location: {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude,
+              address: "Lokasi saat ini"
+            }
+          });
+          setLocationLoading(false);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          alert("Gagal mengambil lokasi. Pastikan GPS aktif.");
+          setLocationLoading(false);
+        }
+      );
+    } else {
+      alert("Geolocation tidak didukung oleh browser ini.");
+      setLocationLoading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +72,14 @@ const JournalView: React.FC<JournalViewProps> = ({ user, onSave, journals }) => 
       ...formData
     };
     onSave(entry);
-    setFormData({ subject: SUBJECTS[0], className: CLASSES[0], material: '', notes: '' });
+    setFormData({ 
+      subject: SUBJECTS[0], 
+      className: CLASSES[0], 
+      material: '', 
+      notes: '', 
+      photo: '', 
+      location: null 
+    });
     setShowForm(false);
   };
 
@@ -100,6 +151,73 @@ const JournalView: React.FC<JournalViewProps> = ({ user, onSave, journals }) => 
               />
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Foto Kegiatan</label>
+                <div className="flex items-center space-x-4">
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    capture="environment"
+                    className="hidden" 
+                    ref={fileInputRef}
+                    onChange={handleCapturePhoto}
+                  />
+                  {formData.photo ? (
+                    <div className="relative w-full h-40 rounded-xl overflow-hidden border border-gray-200">
+                      <img src={formData.photo} alt="Preview" className="w-full h-full object-cover" />
+                      <button 
+                        type="button"
+                        onClick={() => setFormData({...formData, photo: ''})}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full shadow-lg"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full h-40 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl hover:bg-gray-50 transition-all text-gray-400"
+                    >
+                      <Camera size={32} className="mb-2" />
+                      <span className="text-xs font-medium">Ambil Foto</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Tag Lokasi</label>
+                <div className="h-40 flex flex-col items-center justify-center border border-gray-200 rounded-xl bg-gray-50 px-4 text-center">
+                  {formData.location ? (
+                    <div className="space-y-1">
+                      <MapPin size={24} className="mx-auto text-indigo-600 mb-1" />
+                      <p className="text-xs font-bold text-gray-800">Lokasi Tersemat</p>
+                      <p className="text-[10px] text-gray-500">{formData.location.lat.toFixed(4)}, {formData.location.lng.toFixed(4)}</p>
+                      <button 
+                        type="button"
+                        onClick={() => setFormData({...formData, location: null})}
+                        className="text-[10px] text-red-500 font-bold hover:underline mt-1"
+                      >
+                        Hapus Lokasi
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button"
+                      disabled={locationLoading}
+                      onClick={handleGetLocation}
+                      className="flex flex-col items-center space-y-2 text-gray-400 hover:text-indigo-600 transition-all"
+                    >
+                      <MapPin size={32} className={locationLoading ? "animate-bounce" : ""} />
+                      <span className="text-xs font-medium">{locationLoading ? "Mengambil..." : "Sematkan Lokasi"}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex space-x-3 pt-4">
               <button 
                 type="button"
@@ -129,12 +247,27 @@ const JournalView: React.FC<JournalViewProps> = ({ user, onSave, journals }) => 
                   <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
                     <BookOpen size={20} />
                   </div>
-                  <span className="text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded">
-                    {new Date(j.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                  </span>
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-bold text-gray-400 bg-gray-50 px-2 py-1 rounded">
+                      {new Date(j.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                    </span>
+                    {j.location && (
+                      <div className="flex items-center text-[10px] text-indigo-500 mt-1 font-bold">
+                        <MapPin size={10} className="mr-1" />
+                        <span>Lokasi Tersemat</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <h4 className="font-bold text-gray-800">{j.subject}</h4>
                 <p className="text-sm text-indigo-600 font-medium mb-3">{j.className}</p>
+                
+                {j.photo && (
+                  <div className="w-full h-32 rounded-xl overflow-hidden mb-3 border border-gray-100">
+                    <img src={j.photo} alt="Kegiatan" className="w-full h-full object-cover" />
+                  </div>
+                )}
+
                 <div className="space-y-2">
                    <p className="text-sm text-gray-600"><span className="font-bold">Materi:</span> {j.material}</p>
                    {j.notes && <p className="text-xs text-gray-500 italic">"{j.notes}"</p>}

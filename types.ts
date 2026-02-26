@@ -43,6 +43,12 @@ export interface JournalEntry {
   className: string;
   material: string;
   notes: string;
+  photo?: string;
+  location?: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
 }
 
 export interface PermissionRequest {

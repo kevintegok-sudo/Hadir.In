@@ -430,13 +430,13 @@ const AbsenView: React.FC<AbsenViewProps> = ({ user, onComplete, records, settin
                     muted 
                     className="w-full h-full object-cover transform scale-x-[-1]" 
                    />
-                   <div className="absolute inset-0 z-10 border-[30px] border-black/30 rounded-full pointer-events-none">
-                     <div className="w-full h-full border-2 border-white/50 rounded-full"></div>
+                   <div className="absolute inset-0 z-10 border-[40px] border-black/40 rounded-full pointer-events-none">
+                     <div className="w-full h-full border-2 border-dashed border-white/50 rounded-full animate-pulse"></div>
                    </div>
                    
                    {!isLoadingCamera && isCameraActive && (
-                      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20">
-                        <span className="text-[10px] text-white font-black uppercase">Posisikan Wajah di Tengah</span>
+                      <div className="absolute top-8 left-1/2 -translate-x-1/2 z-10 bg-white/10 backdrop-blur-md px-6 py-3 rounded-full border border-white/20 shadow-2xl">
+                        <span className="text-[10px] text-white font-black uppercase tracking-widest">Posisikan Wajah di Tengah Oval</span>
                       </div>
                    )}
                  </>

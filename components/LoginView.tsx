@@ -108,6 +108,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         </form>
 
         <div className="mt-12 flex flex-col items-center space-y-4">
+           <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 w-full">
+             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 text-center">Akun Demo</p>
+             <div className="flex justify-between text-[10px] font-bold text-gray-500">
+               <span>Admin: 123456 / admin</span>
+               <span>Guru: 654321 / guru</span>
+             </div>
+           </div>
            <div className="flex items-center space-x-2 text-gray-300 text-[10px] font-black uppercase tracking-widest">
               <ShieldCheck size={14} />
               <span>Koneksi Terenkripsi AES-256</span>

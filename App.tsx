@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { User, AttendanceRecord, JournalEntry, PermissionRequest, PermissionStatus, AppSettings, AppNotification } from './types';
 import { MOCK_USERS, DEFAULT_SETTINGS } from './constants';
 import Dashboard from './components/Dashboard';
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isInitialized, setIsInitialized] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
   
   const [users, setUsers] = useState<User[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -100,19 +102,39 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
-  const addNotification = async (notif: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
+  const addNotification = useCallback(async (notif: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
     try {
       const res = await fetch('/api/notifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(notif)
       });
-      const newNotif = await res.json();
-      setNotifications(prev => [newNotif, ...prev]);
+      if (res.ok) {
+        const newNotif = await res.json();
+        setNotifications(prev => [newNotif, ...prev]);
+        setToast({ message: notif.title, type: notif.type === 'warning' ? 'info' : notif.type as any });
+      } else {
+        // Fallback for static hosting
+        const fallbackNotif: AppNotification = {
+          ...notif,
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: new Date().toISOString(),
+          isRead: false
+        };
+        setNotifications(prev => [fallbackNotif, ...prev]);
+        setToast({ message: notif.title, type: notif.type === 'warning' ? 'info' : notif.type as any });
+      }
     } catch (error) {
       console.error("Failed to add notification:", error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const markAllRead = async () => {
     if (!currentUser) return;
@@ -257,18 +279,32 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
-      const updatedPermission = await res.json();
-      
-      setPermissions(prev => prev.map(p => p.id === id ? updatedPermission : p));
-
-      addNotification({
-        userId: updatedPermission.userId,
-        title: `Izin ${status === PermissionStatus.APPROVED ? 'Disetujui' : 'Ditolak'}`,
-        message: `Permohonan izin ${updatedPermission.type} Anda telah ${status === PermissionStatus.APPROVED ? 'diterima' : 'ditolak'} oleh Admin.`,
-        type: status === PermissionStatus.APPROVED ? 'success' : 'error'
-      });
+      if (res.ok) {
+        const updatedPermission = await res.json();
+        setPermissions(prev => prev.map(p => p.id === id ? updatedPermission : p));
+        
+        addNotification({
+          userId: updatedPermission.userId,
+          title: `Izin ${status === PermissionStatus.APPROVED ? 'Disetujui' : 'Ditolak'}`,
+          message: `Permohonan izin ${updatedPermission.type} Anda telah ${status === PermissionStatus.APPROVED ? 'diterima' : 'ditolak'} oleh Admin.`,
+          type: status === PermissionStatus.APPROVED ? 'success' : 'error'
+        });
+      } else {
+        throw new Error("API error");
+      }
     } catch (error) {
-      console.error("Failed to update permission:", error);
+      console.warn("Failed to update permission on API, updating local state only:", error);
+      const perm = permissions.find(p => p.id === id);
+      if (perm) {
+        const updated = { ...perm, status };
+        setPermissions(prev => prev.map(p => p.id === id ? updated : p));
+        addNotification({
+          userId: perm.userId,
+          title: `Izin ${status === PermissionStatus.APPROVED ? 'Disetujui' : 'Ditolak'}`,
+          message: `Permohonan izin ${perm.type} Anda telah ${status === PermissionStatus.APPROVED ? 'diterima' : 'ditolak'} oleh Admin.`,
+          type: status === PermissionStatus.APPROVED ? 'success' : 'error'
+        });
+      }
     }
   };
 
@@ -279,10 +315,16 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req)
       });
-      const newRequest = await res.json();
-      setPermissions(prev => [...prev, newRequest]);
+      if (res.ok) {
+        const newRequest = await res.json();
+        setPermissions(prev => [...prev, newRequest]);
+      } else {
+        throw new Error("API error");
+      }
     } catch (error) {
-      console.error("Failed to add permission:", error);
+      console.warn("Failed to add permission to API, updating local state only:", error);
+      const newRequest = { ...req, id: Math.random().toString(36).substr(2, 9), status: PermissionStatus.PENDING };
+      setPermissions(prev => [...prev, newRequest]);
     }
   };
 
@@ -293,19 +335,29 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(user)
       });
-      const newUser = await res.json();
-      setUsers(prev => [...prev, newUser]);
+      if (res.ok) {
+        const newUser = await res.json();
+        setUsers(prev => [...prev, newUser]);
+      } else {
+        throw new Error("API error");
+      }
     } catch (error) {
-      console.error("Failed to register user:", error);
+      console.warn("Failed to register user on API, updating local state only:", error);
+      setUsers(prev => [...prev, user]);
     }
   };
 
   const deleteUser = async (id: string) => {
     try {
-      await fetch(`/api/users/${id}`, { method: 'DELETE' });
-      setUsers(prev => prev.filter(u => u.id !== id));
+      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setUsers(prev => prev.filter(u => u.id !== id));
+      } else {
+        throw new Error("API error");
+      }
     } catch (error) {
-      console.error("Failed to delete user:", error);
+      console.warn("Failed to delete user on API, updating local state only:", error);
+      setUsers(prev => prev.filter(u => u.id !== id));
     }
   };
 
@@ -316,10 +368,15 @@ const App: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
       });
-      const updatedSettings = await res.json();
-      setSettings(updatedSettings);
+      if (res.ok) {
+        const updatedSettings = await res.json();
+        setSettings(updatedSettings);
+      } else {
+        throw new Error("API error");
+      }
     } catch (error) {
-      console.error("Failed to update settings:", error);
+      console.warn("Failed to update settings on API, updating local state only:", error);
+      setSettings(newSettings);
     }
   };
 
@@ -403,20 +460,45 @@ const App: React.FC = () => {
         </div>
       </header>
       
-      <main className="flex-1 pb-32 pt-6 px-4 md:px-8 max-w-5xl mx-auto w-full">
-        {(() => {
-          switch (activeTab) {
-            case 'dashboard': return <Dashboard user={currentUser} attendance={attendance} journals={journals} permissions={permissions} settings={settings} />;
-            case 'absen': return <AbsenView user={currentUser} onComplete={addAttendance} records={attendance} settings={settings} />;
-            case 'jurnal': return <JournalView user={currentUser} onSave={addJournal} journals={journals} />;
-            case 'izin': return <PermissionView user={currentUser} onSubmit={addPermission} requests={permissions} />;
-            case 'admin': return <AdminDashboard users={users} attendance={attendance} journals={journals} permissions={permissions} settings={settings} onUpdatePermission={updatePermissionStatus} onRegisterUser={registerUser} onDeleteUser={deleteUser} onUpdateSettings={updateSettings} />;
-            default: return <Dashboard user={currentUser} attendance={attendance} journals={journals} permissions={permissions} settings={settings} />;
-          }
-        })()}
+      <main className="flex-1 pb-32 pt-6 px-4 md:px-8 max-w-5xl mx-auto w-full overflow-x-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          >
+            {(() => {
+              switch (activeTab) {
+                case 'dashboard': return <Dashboard user={currentUser} attendance={attendance} journals={journals} permissions={permissions} settings={settings} />;
+                case 'absen': return <AbsenView user={currentUser} onComplete={addAttendance} records={attendance} settings={settings} />;
+                case 'jurnal': return <JournalView user={currentUser} onSave={addJournal} journals={journals} />;
+                case 'izin': return <PermissionView user={currentUser} onSubmit={addPermission} requests={permissions} />;
+                case 'admin': return <AdminDashboard users={users} attendance={attendance} journals={journals} permissions={permissions} settings={settings} onUpdatePermission={updatePermissionStatus} onRegisterUser={registerUser} onDeleteUser={deleteUser} onUpdateSettings={updateSettings} />;
+                default: return <Dashboard user={currentUser} attendance={attendance} journals={journals} permissions={permissions} settings={settings} />;
+              }
+            })()}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       <BottomNav activeTab={activeTab} onTabChange={changeTab} user={currentUser} />
+
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl bg-gray-900 text-white text-xs font-black shadow-2xl flex items-center space-x-3 border border-white/10"
+          >
+            <div className={`w-2 h-2 rounded-full ${toast.type === 'success' ? 'bg-green-500' : toast.type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`} />
+            <span>{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

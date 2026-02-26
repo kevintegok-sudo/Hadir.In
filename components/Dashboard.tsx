@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   Users, 
   Clock, 
@@ -9,7 +9,8 @@ import {
   MapPin,
   AlertCircle,
   ArrowRight,
-  BookMarked
+  BookMarked,
+  Target
 } from 'lucide-react';
 import { User, AttendanceRecord, JournalEntry, PermissionRequest, AppSettings } from '../types';
 import { 
@@ -28,52 +29,59 @@ const Dashboard: React.FC<DashboardProps> = ({ user, attendance, journals, permi
   const today = new Date().toISOString().split('T')[0];
   const timeNow = new Date().toTimeString().slice(0, 5);
   
-  const userAttendanceToday = attendance.filter(a => a.userId === user.id && a.timestamp.startsWith(today));
-  const hasCheckedIn = userAttendanceToday.some(a => a.type === 'in');
-  const hasCheckedOut = userAttendanceToday.some(a => a.type === 'out');
-  const hasJournalToday = journals.some(j => j.userId === user.id && j.date === today);
+  const userAttendanceToday = useMemo(() => attendance.filter(a => a.userId === user.id && a.timestamp.startsWith(today)), [attendance, user.id, today]);
+  const hasCheckedIn = useMemo(() => userAttendanceToday.some(a => a.type === 'in'), [userAttendanceToday]);
+  const hasCheckedOut = useMemo(() => userAttendanceToday.some(a => a.type === 'out'), [userAttendanceToday]);
+  const hasJournalToday = useMemo(() => journals.some(j => j.userId === user.id && j.date === today), [journals, user.id, today]);
 
   // Reminders Logic
-  const reminders = [];
-  
-  if (!hasCheckedIn) {
-    const isLate = timeNow > settings.attendanceHours.endIn;
-    reminders.push({
-      id: 'absen-masuk',
-      title: isLate ? 'Peringatan: Terlambat' : 'Absen Masuk Sekarang',
-      desc: isLate ? `Batas absen pukul ${settings.attendanceHours.endIn}. Segera lakukan presensi!` : `Sesi masuk aktif hingga ${settings.attendanceHours.endIn} WIB.`,
-      icon: <Clock className={isLate ? 'text-red-500' : 'text-blue-500'} />,
-      color: isLate ? 'bg-red-50 border-red-100' : 'bg-blue-50 border-blue-100',
-      action: 'absen'
-    });
-  } else if (!hasJournalToday && user.role === 'guru') {
-    reminders.push({
-      id: 'isi-jurnal',
-      title: 'Lengkapi Jurnal Harian',
-      desc: 'Anda sudah hadir, jangan lupa mengisi jurnal aktivitas mengajar hari ini.',
-      icon: <BookMarked className="text-indigo-500" />,
-      color: 'bg-indigo-50 border-indigo-100',
-      action: 'jurnal'
-    });
-  }
+  const reminders = useMemo(() => {
+    const list = [];
+    if (!hasCheckedIn) {
+      const isLate = timeNow > settings.attendanceHours.endIn;
+      list.push({
+        id: 'absen-masuk',
+        title: isLate ? 'Peringatan: Terlambat' : 'Absen Masuk Sekarang',
+        desc: isLate ? `Batas absen pukul ${settings.attendanceHours.endIn}. Segera lakukan presensi!` : `Sesi masuk aktif hingga ${settings.attendanceHours.endIn} WIB.`,
+        icon: <Clock className={isLate ? 'text-red-500' : 'text-blue-500'} />,
+        color: isLate ? 'bg-red-50 border-red-100' : 'bg-blue-50 border-blue-100',
+        action: 'absen'
+      });
+    } else if (!hasJournalToday && user.role === 'guru') {
+      list.push({
+        id: 'isi-jurnal',
+        title: 'Lengkapi Jurnal Harian',
+        desc: 'Anda sudah hadir, jangan lupa mengisi jurnal aktivitas mengajar hari ini.',
+        icon: <BookMarked className="text-indigo-500" />,
+        color: 'bg-indigo-50 border-indigo-100',
+        action: 'jurnal'
+      });
+    }
 
-  if (hasCheckedIn && !hasCheckedOut && timeNow >= settings.attendanceHours.startOut) {
-    reminders.push({
-      id: 'absen-pulang',
-      title: 'Waktunya Absen Pulang',
-      desc: `Sesi pulang sudah dibuka sejak pukul ${settings.attendanceHours.startOut}. Hati-hati di jalan!`,
-      icon: <CheckCircle2 className="text-green-500" />,
-      color: 'bg-green-50 border-green-100',
-      action: 'absen'
-    });
-  }
+    if (hasCheckedIn && !hasCheckedOut && timeNow >= settings.attendanceHours.startOut) {
+      list.push({
+        id: 'absen-pulang',
+        title: 'Waktunya Absen Pulang',
+        desc: `Sesi pulang sudah dibuka sejak pukul ${settings.attendanceHours.startOut}. Hati-hati di jalan!`,
+        icon: <CheckCircle2 className="text-green-500" />,
+        color: 'bg-green-50 border-green-100',
+        action: 'absen'
+      });
+    }
+    return list;
+  }, [hasCheckedIn, hasCheckedOut, hasJournalToday, timeNow, settings, user.role]);
 
-  const stats = [
+  const stats = useMemo(() => [
     { label: 'Total Hadir', value: attendance.filter(a => a.type === 'in' && a.userId === user.id).length, icon: <CheckCircle2 className="text-green-500" />, color: 'bg-green-50' },
     { label: 'Jurnal Terisi', value: journals.filter(j => j.userId === user.id).length, icon: <FileText className="text-blue-500" />, color: 'bg-blue-50' },
     { label: 'Izin Disetujui', value: permissions.filter(p => p.userId === user.id && p.status === 'Approved').length, icon: <Users className="text-purple-500" />, color: 'bg-purple-50' },
     { label: 'Ketepatan Waktu', value: '94%', icon: <TrendingUp className="text-indigo-500" />, color: 'bg-indigo-50' },
-  ];
+  ], [attendance, journals, permissions, user.id]);
+
+  const chartData = useMemo(() => {
+    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum'];
+    return days.map(day => ({ name: day, hadir: Math.floor(Math.random() * 5) + 10 }));
+  }, []);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -137,7 +145,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, attendance, journals, permi
           </h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[{ name: 'Sen', hadir: 12 }, { name: 'Sel', hadir: 15 }, { name: 'Rab', hadir: 14 }, { name: 'Kam', hadir: 13 }, { name: 'Jum', hadir: 11 }]}>
+              <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} fontSize={10} fontWeight="bold" />
                 <YAxis axisLine={false} tickLine={false} fontSize={10} fontWeight="bold" />
