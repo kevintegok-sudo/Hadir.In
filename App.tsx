@@ -398,14 +398,10 @@ const App: React.FC = () => {
     <div className="flex flex-col min-h-screen bg-gray-50/30 selection:bg-blue-100">
       <header className="bg-white/90 backdrop-blur-xl px-6 py-4 flex items-center justify-between sticky top-0 z-40 border-b border-gray-100 shadow-sm transition-all duration-300">
         <div className="flex items-center space-x-2 group cursor-pointer" onClick={() => changeTab('dashboard')}>
-           <div className="w-9 h-9 transition-transform duration-300 group-hover:scale-110">
-              <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-sm">
-                <polygon points="20,70 45,70 45,30 20,30" fill="#3B82F6" opacity="0.8" />
-                <polygon points="40,90 85,45 40,0" fill="#2563EB" />
-                <polygon points="20,40 50,40 50,15" fill="#60A5FA" />
-              </svg>
+           <div className="w-9 h-9 transition-transform duration-300 group-hover:scale-110 flex items-center justify-center">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain drop-shadow-sm" onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=SMK'} />
            </div>
-           <span className="text-xl font-black tracking-tighter text-blue-600">Hadir.In</span>
+           <span className="text-xl font-black tracking-tighter text-blue-600">SMKN 1 Poco Ranaka</span>
         </div>
         
         <div className="flex items-center space-x-2 relative">

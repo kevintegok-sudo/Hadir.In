@@ -34,16 +34,12 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
       <div className="max-w-md w-full bg-white p-8 md:p-12 rounded-[3rem] shadow-2xl shadow-blue-100/50 border border-gray-100 animate-in fade-in zoom-in-95 duration-700">
         <div className="text-center mb-10">
           <div className="flex justify-center mb-6">
-            <div className="relative w-24 h-24 animate-pulse-slow">
-               <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-xl">
-                 <polygon points="20,70 45,70 45,30 20,30" fill="#3B82F6" opacity="0.8" />
-                 <polygon points="40,90 85,45 40,0" fill="#2563EB" />
-                 <polygon points="20,40 50,40 50,15" fill="#60A5FA" />
-               </svg>
+            <div className="relative w-24 h-24 animate-pulse-slow flex items-center justify-center">
+               <img src="/logo.png" alt="Logo" className="w-full h-full object-contain drop-shadow-xl" onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/200?text=SMK'} />
             </div>
           </div>
-          <h1 className="text-4xl font-black text-[#2563EB] tracking-tighter mb-1">Hadir.In</h1>
-          <p className="text-gray-400 text-xs font-bold uppercase tracking-[0.2em]">Sistem Presensi Pegawai Terpadu</p>
+          <h1 className="text-3xl font-black text-[#2563EB] tracking-tighter mb-1">SMKN 1 Poco Ranaka</h1>
+          <p className="text-gray-400 text-xs font-bold uppercase tracking-[0.2em]">Absen Dan Jurnal SMKN 1 Poco Ranaka</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -108,19 +104,12 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         </form>
 
         <div className="mt-12 flex flex-col items-center space-y-4">
-           <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 w-full">
-             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 text-center">Akun Demo</p>
-             <div className="flex justify-between text-[10px] font-bold text-gray-500">
-               <span>Admin: 123456 / admin</span>
-               <span>Guru: 654321 / guru</span>
-             </div>
-           </div>
            <div className="flex items-center space-x-2 text-gray-300 text-[10px] font-black uppercase tracking-widest">
               <ShieldCheck size={14} />
               <span>Koneksi Terenkripsi AES-256</span>
            </div>
            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-widest">
-             © 2024 HADIR.IN SOLUTIONS
+             © 2024 SMKN 1 POCO RANAKA SOLUTIONS
            </p>
         </div>
       </div>

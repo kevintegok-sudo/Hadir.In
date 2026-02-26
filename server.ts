@@ -23,10 +23,10 @@ const INITIAL_DATA = {
   permissions: [],
   settings: {
     schoolLocation: {
-      lat: -6.175392,
-      lng: 106.827153,
+      lat: -8.6254,
+      lng: 120.4578,
       radius: 100,
-      address: "Pusat Sekolah (Default: Monas Jakarta)"
+      address: "SMKN 1 Poco Ranaka (Manggarai Timur, NTT)"
     },
     attendanceHours: {
       startIn: "06:30",

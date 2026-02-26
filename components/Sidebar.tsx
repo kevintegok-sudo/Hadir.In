@@ -49,14 +49,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, user }) => {
         <div className="flex flex-col h-full">
           <div className="p-8">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10">
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                  <polygon points="20,70 45,70 45,30 20,30" fill="#3B82F6" opacity="0.8" />
-                  <polygon points="40,90 85,45 40,0" fill="#2563EB" />
-                  <polygon points="20,40 50,40 50,15" fill="#60A5FA" />
-                </svg>
+              <div className="w-10 h-10 flex items-center justify-center">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" onError={(e) => e.currentTarget.src = 'https://via.placeholder.com/100?text=SMK'} />
               </div>
-              <span className="text-2xl font-black tracking-tighter text-[#2563EB]">Hadir.In</span>
+              <span className="text-xl font-black tracking-tighter text-[#2563EB]">SMKN 1 Poco Ranaka</span>
             </div>
           </div>
 

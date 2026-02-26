@@ -4,7 +4,7 @@
  * Dalam produksi nyata, gunakan pustaka enkripsi seperti CryptoJS dengan kunci dari server.
  */
 
-const SECRET_SALT = 'hadir_in_secure_v1';
+const SECRET_SALT = 'smkn1_pocoranak_secure_v1';
 
 export const secureStorage = {
   setItem: (key: string, value: any) => {

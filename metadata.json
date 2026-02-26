@@ -1,5 +1,5 @@
 {
-  "name": "Hadir.In",
+  "name": "Absensi & Jurnal SMKN 1 Poco Ranaka",
   "description": "Sistem absensi modern untuk guru dan pegawai dengan fitur Geofencing, pengenalan wajah, jurnal harian, dan manajemen perizinan terpadu.",
   "requestFramePermissions": [
     "camera",
