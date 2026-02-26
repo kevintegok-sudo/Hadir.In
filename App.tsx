@@ -11,6 +11,7 @@ import AdminDashboard from './components/AdminDashboard';
 import LoginView from './components/LoginView';
 import BottomNav from './components/BottomNav';
 import { secureStorage } from './utils/security';
+import { storageService } from './src/services/storageService';
 import { LogOut, Bell, X, Check } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -50,46 +51,23 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const fetchWithCheck = async (url: string) => {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.statusText}`);
-          return res.json();
-        };
+        const usersData = storageService.getUsers();
+        const attendanceData = storageService.getAttendance();
+        const journalsData = storageService.getJournals();
+        const permissionsData = storageService.getPermissions();
+        const settingsData = storageService.getSettings();
 
-        try {
-          const [usersData, attendanceData, journalsData, permissionsData, settingsData] = await Promise.all([
-            fetchWithCheck('/api/users'),
-            fetchWithCheck('/api/attendance'),
-            fetchWithCheck('/api/journals'),
-            fetchWithCheck('/api/permissions'),
-            fetchWithCheck('/api/settings')
-          ]);
-
-          setUsers(usersData);
-          setAttendance(attendanceData);
-          setJournals(journalsData);
-          setPermissions(permissionsData);
-          setSettings(settingsData);
-        } catch (apiError) {
-          console.warn("API not available, falling back to mock data (Normal for static hosting like Netlify):", apiError);
-          // Fallback to constants
-          setUsers(MOCK_USERS);
-          setSettings(DEFAULT_SETTINGS);
-          // Initialize empty arrays for other data if API fails
-          setAttendance([]);
-          setJournals([]);
-          setPermissions([]);
-        }
+        setUsers(usersData);
+        setAttendance(attendanceData);
+        setJournals(journalsData);
+        setPermissions(permissionsData);
+        setSettings(settingsData);
 
         const savedUser = secureStorage.getItem<User>('edu_user');
         if (savedUser) {
           setCurrentUser(savedUser);
-          try {
-            const notifData = await fetchWithCheck(`/api/notifications/${savedUser.id}`);
-            setNotifications(notifData);
-          } catch (e) {
-            console.warn("Failed to fetch notifications:", e);
-          }
+          const notifData = storageService.getNotifications(savedUser.id);
+          setNotifications(notifData);
           window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
         }
       } catch (error) {
@@ -104,26 +82,9 @@ const App: React.FC = () => {
 
   const addNotification = useCallback(async (notif: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => {
     try {
-      const res = await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(notif)
-      });
-      if (res.ok) {
-        const newNotif = await res.json();
-        setNotifications(prev => [newNotif, ...prev]);
-        setToast({ message: notif.title, type: notif.type === 'warning' ? 'info' : notif.type as any });
-      } else {
-        // Fallback for static hosting
-        const fallbackNotif: AppNotification = {
-          ...notif,
-          id: Math.random().toString(36).substr(2, 9),
-          timestamp: new Date().toISOString(),
-          isRead: false
-        };
-        setNotifications(prev => [fallbackNotif, ...prev]);
-        setToast({ message: notif.title, type: notif.type === 'warning' ? 'info' : notif.type as any });
-      }
+      const newNotif = storageService.addNotification(notif);
+      setNotifications(prev => [newNotif, ...prev]);
+      setToast({ message: notif.title, type: notif.type === 'warning' ? 'info' : notif.type as any });
     } catch (error) {
       console.error("Failed to add notification:", error);
     }
@@ -139,9 +100,7 @@ const App: React.FC = () => {
   const markAllRead = async () => {
     if (!currentUser) return;
     try {
-      await fetch(`/api/notifications/read-all/${currentUser.id}`, {
-        method: 'PATCH'
-      });
+      storageService.markAllNotificationsRead(currentUser.id);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch (error) {
       console.error("Failed to mark all read:", error);
@@ -150,54 +109,22 @@ const App: React.FC = () => {
 
   const handleLogin = async (nip: string, pass: string): Promise<boolean> => {
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nip, password: pass })
-      });
+      const user = storageService.login(nip, pass);
       
-      if (res.ok) {
-        const user = await res.json();
+      if (user) {
         setCurrentUser(user);
         secureStorage.setItem('edu_user', user);
         
-        try {
-          const notifRes = await fetch(`/api/notifications/${user.id}`);
-          if (notifRes.ok) {
-            const notifData = await notifRes.json();
-            setNotifications(notifData);
-          }
-        } catch (e) {
-          console.warn("Could not fetch notifications from API");
-        }
+        const notifData = storageService.getNotifications(user.id);
+        setNotifications(notifData);
         
         window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
         return true;
-      }
-      
-      // If API returns 404 or other error, try local fallback (for Netlify/Static)
-      if (res.status === 404 || !res.ok) {
-        const localUser = MOCK_USERS.find(u => u.nip === nip && u.password === pass);
-        if (localUser) {
-          console.log("Logged in using local fallback data");
-          setCurrentUser(localUser);
-          secureStorage.setItem('edu_user', localUser);
-          window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
-          return true;
-        }
       }
       
       return false;
     } catch (error) {
-      console.warn("Login API failed, trying local fallback:", error);
-      // Network error or API down - try local fallback
-      const localUser = MOCK_USERS.find(u => u.nip === nip && u.password === pass);
-      if (localUser) {
-        setCurrentUser(localUser);
-        secureStorage.setItem('edu_user', localUser);
-        window.history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
-        return true;
-      }
+      console.error("Login failed:", error);
       return false;
     }
   };
@@ -211,19 +138,10 @@ const App: React.FC = () => {
 
   const addAttendance = async (record: AttendanceRecord) => {
     try {
-      const res = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(record)
-      });
-      if (res.ok) {
-        const newRecord = await res.json();
-        setAttendance(prev => [...prev, newRecord]);
-      } else {
-        throw new Error("API error");
-      }
+      const newRecord = storageService.addAttendance(record);
+      setAttendance(prev => [...prev, newRecord]);
     } catch (error) {
-      console.warn("Failed to add attendance to API, updating local state only:", error);
+      console.warn("Failed to add attendance:", error);
       setAttendance(prev => [...prev, record]);
     }
 
@@ -248,19 +166,10 @@ const App: React.FC = () => {
 
   const addJournal = async (entry: JournalEntry) => {
     try {
-      const res = await fetch('/api/journals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry)
-      });
-      if (res.ok) {
-        const newEntry = await res.json();
-        setJournals(prev => [...prev, newEntry]);
-      } else {
-        throw new Error("API error");
-      }
+      const newEntry = storageService.addJournal(entry);
+      setJournals(prev => [...prev, newEntry]);
     } catch (error) {
-      console.warn("Failed to add journal to API, updating local state only:", error);
+      console.warn("Failed to add journal:", error);
       setJournals(prev => [...prev, entry]);
     }
     
@@ -274,13 +183,8 @@ const App: React.FC = () => {
 
   const updatePermissionStatus = async (id: string, status: PermissionStatus) => {
     try {
-      const res = await fetch(`/api/permissions/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-      if (res.ok) {
-        const updatedPermission = await res.json();
+      const updatedPermission = storageService.updatePermissionStatus(id, status as any);
+      if (updatedPermission) {
         setPermissions(prev => prev.map(p => p.id === id ? updatedPermission : p));
         
         addNotification({
@@ -289,93 +193,46 @@ const App: React.FC = () => {
           message: `Permohonan izin ${updatedPermission.type} Anda telah ${status === PermissionStatus.APPROVED ? 'diterima' : 'ditolak'} oleh Admin.`,
           type: status === PermissionStatus.APPROVED ? 'success' : 'error'
         });
-      } else {
-        throw new Error("API error");
       }
     } catch (error) {
-      console.warn("Failed to update permission on API, updating local state only:", error);
-      const perm = permissions.find(p => p.id === id);
-      if (perm) {
-        const updated = { ...perm, status };
-        setPermissions(prev => prev.map(p => p.id === id ? updated : p));
-        addNotification({
-          userId: perm.userId,
-          title: `Izin ${status === PermissionStatus.APPROVED ? 'Disetujui' : 'Ditolak'}`,
-          message: `Permohonan izin ${perm.type} Anda telah ${status === PermissionStatus.APPROVED ? 'diterima' : 'ditolak'} oleh Admin.`,
-          type: status === PermissionStatus.APPROVED ? 'success' : 'error'
-        });
-      }
+      console.warn("Failed to update permission:", error);
     }
   };
 
   const addPermission = async (req: PermissionRequest) => {
     try {
-      const res = await fetch('/api/permissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req)
-      });
-      if (res.ok) {
-        const newRequest = await res.json();
-        setPermissions(prev => [...prev, newRequest]);
-      } else {
-        throw new Error("API error");
-      }
-    } catch (error) {
-      console.warn("Failed to add permission to API, updating local state only:", error);
-      const newRequest = { ...req, id: Math.random().toString(36).substr(2, 9), status: PermissionStatus.PENDING };
+      const newRequest = storageService.addPermission(req);
       setPermissions(prev => [...prev, newRequest]);
+    } catch (error) {
+      console.warn("Failed to add permission:", error);
     }
   };
 
   const registerUser = async (user: User) => {
     try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(user)
-      });
-      if (res.ok) {
-        const newUser = await res.json();
-        setUsers(prev => [...prev, newUser]);
-      } else {
-        throw new Error("API error");
-      }
+      const newUser = storageService.addUser(user);
+      setUsers(prev => [...prev, newUser]);
     } catch (error) {
-      console.warn("Failed to register user on API, updating local state only:", error);
+      console.warn("Failed to register user:", error);
       setUsers(prev => [...prev, user]);
     }
   };
 
   const deleteUser = async (id: string) => {
     try {
-      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setUsers(prev => prev.filter(u => u.id !== id));
-      } else {
-        throw new Error("API error");
-      }
-    } catch (error) {
-      console.warn("Failed to delete user on API, updating local state only:", error);
+      storageService.deleteUser(id);
       setUsers(prev => prev.filter(u => u.id !== id));
+    } catch (error) {
+      console.warn("Failed to delete user:", error);
     }
   };
 
   const updateSettings = async (newSettings: AppSettings) => {
     try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings)
-      });
-      if (res.ok) {
-        const updatedSettings = await res.json();
-        setSettings(updatedSettings);
-      } else {
-        throw new Error("API error");
-      }
+      const updatedSettings = storageService.updateSettings(newSettings);
+      setSettings(updatedSettings);
     } catch (error) {
-      console.warn("Failed to update settings on API, updating local state only:", error);
+      console.warn("Failed to update settings:", error);
       setSettings(newSettings);
     }
   };
