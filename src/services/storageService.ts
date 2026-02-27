@@ -17,7 +17,11 @@ const get = <T>(key: string, defaultValue: T): T => {
     localStorage.setItem(key, JSON.stringify(defaultValue));
     return defaultValue;
   }
-  return JSON.parse(data);
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return defaultValue;
+  }
 };
 
 const set = (key: string, value: any) => {
@@ -30,9 +34,9 @@ export const storageService = {
   addUser: (user: Omit<User, 'id'>): User => {
     const users = storageService.getUsers();
     const newUser = { ...user, id: Math.random().toString(36).substr(2, 9) };
-    users.push(newUser);
+    users.push(newUser as User);
     set(DB_KEYS.USERS, users);
-    return newUser;
+    return newUser as User;
   },
   deleteUser: (id: string) => {
     const users = storageService.getUsers();
@@ -53,9 +57,9 @@ export const storageService = {
   addAttendance: (record: Omit<AttendanceRecord, 'id'>): AttendanceRecord => {
     const data = storageService.getAttendance();
     const newRecord = { ...record, id: Math.random().toString(36).substr(2, 9) };
-    data.push(newRecord);
+    data.push(newRecord as AttendanceRecord);
     set(DB_KEYS.ATTENDANCE, data);
-    return newRecord;
+    return newRecord as AttendanceRecord;
   },
 
   // Journals
@@ -63,9 +67,9 @@ export const storageService = {
   addJournal: (entry: Omit<JournalEntry, 'id'>): JournalEntry => {
     const data = storageService.getJournals();
     const newEntry = { ...entry, id: Math.random().toString(36).substr(2, 9) };
-    data.push(newEntry);
+    data.push(newEntry as JournalEntry);
     set(DB_KEYS.JOURNALS, data);
-    return newEntry;
+    return newEntry as JournalEntry;
   },
 
   // Permissions
